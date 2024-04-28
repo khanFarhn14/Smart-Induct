@@ -71,13 +71,23 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     clearPrint("Build tree");
     final bluetoothData = Provider.of<BluetoothData>(context, listen: false);
-    final timerData = Provider.of<TimerData>(context, listen: false);
     bool connectionLoading = false;
     bool disconnectionLoading = false;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Smart Induct', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700),),
+        // leading: Icon(Icons.bluetooth_connected_rounded, color: Colors.green[100],),
+        actions: [
+          Consumer<BluetoothData>(
+            builder: (context, object, child) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: object.bluetoothConnectionStatus ? Icon(Icons.bluetooth_connected_rounded, color: Colors.green[300],) : Icon(Icons.bluetooth_disabled_rounded, color: Colors.red[300],)
+              );
+            }
+          ),
+        ],
         centerTitle: true,
         toolbarHeight: 72,
       ),
@@ -251,7 +261,7 @@ class _HomePageState extends State<HomePage> {
                       timerObject.isRiceCooking ? ()async {
                         if(await sendData("off")){
                           timerObject.resetTimer();
-                          bluetoothData.resetTemperature();
+                          bluetoothDataObject.resetTemperature();
                         }else{
                           Widgets.showSnackBarForFeedback(cntxt: context, message: "An unexpected error occured", isError: true);
                         }
@@ -260,11 +270,16 @@ class _HomePageState extends State<HomePage> {
                       // If the rice is not cooking then do this
                       () async{
                         if(await sendData("on")){
-                          timerData.startCountdown();
-                          Future.delayed(Duration(minutes: timerData.riceMinute)).then((value)async{
-                            clearPrint("${timerData.riceMinute} over");
-                            if(await sendData("off")){
-                              bluetoothData.resetTemperature();
+                          bluetoothDataObject.startTemperature();
+                          timerObject.startCountdown();
+                          Future.delayed(Duration(minutes: timerObject.riceMinute)).then((value)async{
+                            clearPrint("Future.delayed is on");
+                            if(timerObject.isRiceCooking){
+                              timerObject.resetTimer();
+
+                              if(await sendData("off")){
+                                bluetoothDataObject.resetTemperature();
+                              }
                             }
                           });
                         }else{
@@ -297,16 +312,9 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(object.bluetoothConnectionStatus ? "Connected" : "Disconnected", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black87),),
-
-
-          Consumer<BluetoothData>(
-            builder: (context, object, child){
-              return Text(
-                '${object.temperatures[object.currentTemperature]}\u2103',
-                style: const TextStyle(fontSize: 24),
-              );
-            }
+          Text(
+            '${object.temperatures[object.currentTemperature]}\u2103',
+            style: const TextStyle(fontSize: 24),
           ),
 
           Consumer<TimerData>(
