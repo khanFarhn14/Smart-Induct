@@ -1,13 +1,14 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
-// import 'package:flutter_blue/flutter_blue.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:smart_induct/assets.dart';
 import 'package:smart_induct/bluetooth_data.dart';
+import 'package:smart_induct/timer_data.dart';
 import 'package:smart_induct/widgets.dart';
 
 class HomePage extends StatefulWidget {
@@ -22,6 +23,7 @@ class _HomePageState extends State<HomePage> {
   List<BluetoothDevice> bluetoothDevices = [];
   late BluetoothConnection connection;
   String adr = "00:00:13:00:18:4C";
+
 
   @override
   void initState() {
@@ -50,7 +52,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> sendData(String data)  async {
+  Future<bool> sendData(String data)  async {
     data = data.trim();
     try {
       List<int> list = data.codeUnits;
@@ -58,14 +60,18 @@ class _HomePageState extends State<HomePage> {
       connection.output.add(bytes);
       await connection.output.allSent;
       clearPrint("Data sent successfully");
+      return true;
     } catch (e) {
       clearPrint("Send data exception $e");
+      return false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    clearPrint("Build tree");
     final bluetoothData = Provider.of<BluetoothData>(context, listen: false);
+    final timerData = Provider.of<TimerData>(context, listen: false);
     bool connectionLoading = false;
     bool disconnectionLoading = false;
 
@@ -80,19 +86,10 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
+            // Display
             Consumer<BluetoothData>(
               builder: (context, object, child) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  alignment: Alignment.center,
-                  width: double.infinity,
-                  height: 250,
-                  decoration: BoxDecoration(
-                    color: Colors.purple[50],
-                    borderRadius: BorderRadius.circular(12)
-                  ),
-                  child: Text(object.bluetoothConnectionStatus ? "Connected" : "Disconnected", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500, color: Colors.black87),),
-                );
+                return display(object);
               }
             ),
 
@@ -101,6 +98,7 @@ class _HomePageState extends State<HomePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+
                 // Connection Button
                 Consumer<BluetoothData>(
                   builder: (context, object, child) {
@@ -159,6 +157,7 @@ class _HomePageState extends State<HomePage> {
                             // Analyzing the result
                             if(bluetoothData.bluetoothStatus){
                               if(await disconnect()){
+                                object.currentTemperature = 0;
                                 bluetoothData.checkBluetoothConnection(false);
                               }else{
                                 bluetoothData.checkBluetoothConnection(false);
@@ -188,8 +187,12 @@ class _HomePageState extends State<HomePage> {
             Consumer<BluetoothData>(
               builder: (context, object, child){
                 return ElevatedButton(
-                  onPressed: object.bluetoothConnectionStatus ? () {
-                    sendData("on");
+                  onPressed: object.bluetoothConnectionStatus ? () async{
+                    if(!await sendData("on")){
+                      Widgets.showSnackBarForFeedback(cntxt: context, message: "An unexpected error occured", isError: true);
+                      return;
+                    }
+                    object.startTemperature();
                   } : null,
                   child: const Text(" ON ")
                 );
@@ -201,15 +204,123 @@ class _HomePageState extends State<HomePage> {
             Consumer<BluetoothData>(
               builder: (context, object, child) {
                 return ElevatedButton(
-                  onPressed: object.bluetoothConnectionStatus ? () {
-                    sendData("off");
+                  onPressed: object.bluetoothConnectionStatus ? () async{
+                    if(!await sendData("off")){
+                      Widgets.showSnackBarForFeedback(cntxt: context, message: "An unexpected error occured", isError: true);
+                      return;
+                    }
+                    object.resetTemperature();
                   } : null,
                   child: const Text("OFF"),
                 );
               }
             ),
+
+            const SizedBox(height: 12.0,),
+
+            // Temperature
+            Consumer<BluetoothData>(
+              builder: (context, object, child) {
+                return ElevatedButton(
+                  onPressed: object.bluetoothConnectionStatus ? () async{
+                    if(await sendData("-")){
+                      object.decreementTemperature();
+                    }else{
+                      Widgets.showSnackBarForFeedback(cntxt: context, message: "An unexpected error occured", isError: true);
+                    }
+
+                  } : null,
+                  child: const Text("Temperature --"),
+                );
+              }
+            ),
+
+            Divider(
+              color: Colors.purple[100],
+            ),
+
+            // Rice
+            Consumer<TimerData>(
+              builder: (context, timerObject, child) {
+                return Consumer<BluetoothData>(
+                  builder: (context, bluetoothDataObject, child) {
+                    return ElevatedButton.icon(
+                      onPressed: bluetoothDataObject.bluetoothConnectionStatus ? 
+
+                      // If the rice is cooking then do this
+                      timerObject.isRiceCooking ? ()async {
+                        if(await sendData("off")){
+                          timerObject.resetTimer();
+                          bluetoothData.resetTemperature();
+                        }else{
+                          Widgets.showSnackBarForFeedback(cntxt: context, message: "An unexpected error occured", isError: true);
+                        }
+                      }:
+
+                      // If the rice is not cooking then do this
+                      () async{
+                        if(await sendData("on")){
+                          timerData.startCountdown();
+                          Future.delayed(Duration(minutes: timerData.riceMinute)).then((value)async{
+                            clearPrint("${timerData.riceMinute} over");
+                            if(await sendData("off")){
+                              bluetoothData.resetTemperature();
+                            }
+                          });
+                        }else{
+                          Widgets.showSnackBarForFeedback(cntxt: context, message: "An unexpected error occured", isError: true);
+                        }
+                      } : null,
+                      icon: timerObject.isRiceCooking ? const Icon(Icons.stop,) : ImageIcon(AssetImage(IconAssets.riceIcon)),
+                      label: timerObject.isRiceCooking ? const Text("Stop") : const Text("Rice"),
+                    );
+                  }
+                );
+              }
+            ),
           ],
         ),
+      )
+    );
+  }
+
+  Widget display(BluetoothData object){
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      alignment: Alignment.center,
+      width: double.infinity,
+      height: 250,
+      decoration: BoxDecoration(
+        color: Colors.purple[50],
+        borderRadius: BorderRadius.circular(12)
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(object.bluetoothConnectionStatus ? "Connected" : "Disconnected", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black87),),
+
+
+          Consumer<BluetoothData>(
+            builder: (context, object, child){
+              return Text(
+                '${object.temperatures[object.currentTemperature]}\u2103',
+                style: const TextStyle(fontSize: 24),
+              );
+            }
+          ),
+
+          Consumer<TimerData>(
+            builder: (context, object, child){
+              return Text(
+                '${object.hours.toString().padLeft(2, '0')}:${object.minutes.toString().padLeft(2, '0')}:${object.seconds.toString().padLeft(2, '0')}',
+                style: const TextStyle(fontSize: 48),
+              );
+            }
+          ),
+
+          const SizedBox(height: 12,),
+
+        ],
       )
     );
   }
