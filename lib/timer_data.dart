@@ -51,7 +51,7 @@ class TimerData extends ChangeNotifier{
         minutes--;
       }
       if(minutes < 0){
-        resetTimer();
+        // resetTimer();
       }
       notifyListeners();
     });
