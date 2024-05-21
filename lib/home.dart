@@ -77,7 +77,6 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Smart Induct', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700),),
-        // leading: Icon(Icons.bluetooth_connected_rounded, color: Colors.green[100],),
         actions: [
           Consumer<BluetoothData>(
             builder: (context, object, child) {
