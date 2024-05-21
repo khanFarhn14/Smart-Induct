@@ -6,4 +6,5 @@
 </p>
 
 ## Working video
+https://github.com/khanFarhn14/Smart-Induct/assets/98305427/5428e2fd-1e46-4df6-bf9e-58ab69db7c64
 
